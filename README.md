@@ -1,4 +1,5 @@
 # helpme
+commit daily
 
 ## How to start:
 - docker-compose up -d
