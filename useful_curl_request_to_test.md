@@ -8,3 +8,7 @@ curl -d '{"title":"First Request", "description": "First request, requested from
 ```
 curl -X GET http://localhost:8080/v1/requests
 ```
+- binding request
+```
+curl -d '{"helper_id": 2}' -H "Content-Type: application/json" -X PATCH http://localhost:8080/v1/requests/2/binding
+```

@@ -1,6 +1,8 @@
 use crate::Result;
+use axum::extract::Path;
 use axum::routing::get;
-use axum::routing::post;
+use axum::routing::patch;
+// use axum::routing::post;
 use axum::Extension;
 use axum::Json;
 use axum::Router;
@@ -10,7 +12,9 @@ use sqlx::PgPool;
 use validator::Validate;
 
 pub fn router() -> Router {
-    Router::new().route("/v1/requests", get(list_requests).post(create_request))
+    Router::new()
+        .route("/v1/requests", get(list_requests).post(create_request))
+        .route("/v1/requests/:requestId/binding", patch(binding_request))
 }
 
 #[derive(Deserialize, Validate)]
@@ -91,7 +95,13 @@ async fn list_requests(db: Extension<PgPool>) -> Result<Json<Vec<Request>>> {
     let requests = sqlx::query_as!(
         Request,
         r#"
-            select id, title, description, status, price, requester_id, helper_id
+            select id,
+            title,
+            description,
+            status,
+            price,
+            requester_id,
+            helper_id
             from requests
             where deleted_at is null
             "#,
@@ -100,4 +110,50 @@ async fn list_requests(db: Extension<PgPool>) -> Result<Json<Vec<Request>>> {
     .await?;
 
     Ok(Json(requests))
+}
+
+#[serde_with::serde_as]
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct HelperRequest {
+    id: i32,
+    request_id: std::option::Option<i32>,
+    helper_id: std::option::Option<i32>,
+}
+
+#[derive(Deserialize, Validate)]
+struct BindingRequestRequest {
+    #[validate(range(min = 1))]
+    helper_id: i32,
+}
+
+async fn binding_request(
+    db: Extension<PgPool>,
+    Path(request_id): Path<i32>,
+    Json(req): Json<BindingRequestRequest>,
+) -> Result<Json<HelperRequest>> {
+    req.validate()?;
+    let request = sqlx::query_as!(
+        HelperRequest,
+        r#"
+        with inserted_helper_requests as (
+            insert into helper_requests(
+                request_id,
+                helper_id)
+            values($1, $2)
+            returning id,
+            request_id,
+            helper_id)
+        select id,
+        request_id,
+        helper_id
+        from inserted_helper_requests
+        "#,
+        request_id,
+        req.helper_id,
+    )
+    .fetch_one(&*db)
+    .await?;
+
+    Ok(Json(request))
 }
