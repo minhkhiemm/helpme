@@ -1,4 +1,5 @@
 use crate::Result;
+use axum::routing::get;
 use axum::routing::post;
 use axum::Extension;
 use axum::Json;
@@ -9,7 +10,7 @@ use sqlx::PgPool;
 use validator::Validate;
 
 pub fn router() -> Router {
-    Router::new().route("/v1/requests", post(create_request))
+    Router::new().route("/v1/requests", get(list_requests).post(create_request))
 }
 
 #[derive(Deserialize, Validate)]
@@ -22,7 +23,6 @@ struct CreateRequestRequest {
     price: i64,
     #[validate(range(min = 1))]
     requester_id: i32,
-    #[validate(range(min = 1))]
     helper_id: i32,
 }
 
@@ -36,6 +36,7 @@ struct Request {
     price: std::option::Option<i64>,
     requester_id: std::option::Option<i32>,
     helper_id: std::option::Option<i32>,
+    status: String,
 }
 
 async fn create_request(
@@ -43,25 +44,60 @@ async fn create_request(
     Json(req): Json<CreateRequestRequest>,
 ) -> Result<Json<Request>> {
     req.validate()?;
+    let status = if req.helper_id > 0 { "binding" } else { "new" };
     let request = sqlx::query_as!(
         Request,
         r#"
             with inserted_request as (
-                insert into requests(title, description, price, requester_id, helper_id)
-                values($1, $2, $3, $4, $5)
-                returning id, title, description, price, requester_id, helper_id
+                insert into requests(
+                    title,
+                    description,
+                    price,
+                    requester_id,
+                    helper_id,
+                    status)
+                values($1, $2, $3, $4, $5, $6)
+                returning id,
+                title,
+                description,
+                price,
+                requester_id,
+                helper_id,
+                status
             )
-            select id, title, description, price, requester_id, helper_id
+            select id,
+            title,
+            description,
+            price,
+            requester_id,
+            helper_id,
+            status
             from inserted_request
         "#,
         req.title,
         req.description,
         req.price,
         req.requester_id,
-        req.helper_id
+        req.helper_id,
+        status,
     )
     .fetch_one(&*db)
     .await?;
 
     Ok(Json(request))
+}
+
+async fn list_requests(db: Extension<PgPool>) -> Result<Json<Vec<Request>>> {
+    let requests = sqlx::query_as!(
+        Request,
+        r#"
+            select id, title, description, status, price, requester_id, helper_id
+            from requests
+            where deleted_at is null
+            "#,
+    )
+    .fetch_all(&*db)
+    .await?;
+
+    Ok(Json(requests))
 }
