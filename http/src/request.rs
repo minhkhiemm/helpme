@@ -1,5 +1,7 @@
+use crate::Error;
 use crate::Result;
 use axum::extract::Path;
+use axum::http::StatusCode;
 use axum::routing::get;
 use axum::routing::patch;
 // use axum::routing::post;
@@ -131,29 +133,23 @@ async fn binding_request(
     db: Extension<PgPool>,
     Path(request_id): Path<i32>,
     Json(req): Json<BindingRequestRequest>,
-) -> Result<Json<HelperRequest>> {
+) -> Result<StatusCode> {
     req.validate()?;
-    let request = sqlx::query_as!(
-        HelperRequest,
+    sqlx::query!(
         r#"
-        with inserted_helper_requests as (
             insert into helper_requests(
                 request_id,
                 helper_id)
             values($1, $2)
-            returning id,
-            request_id,
-            helper_id)
-        select id,
-        request_id,
-        helper_id
-        from inserted_helper_requests
         "#,
         request_id,
         req.helper_id,
     )
-    .fetch_one(&*db)
-    .await?;
+    .execute(&*db)
+    .await
+    .map_err(|e| match e {
+        _ => Error::Sqlx(e.into()),
+    })?;
 
-    Ok(Json(request))
+    Ok(StatusCode::NO_CONTENT)
 }
