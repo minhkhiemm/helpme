@@ -1,14 +1,9 @@
-use crate::Error;
-use crate::Result;
+use crate::{Error, Result};
 use axum::extract::Path;
 use axum::http::StatusCode;
-use axum::routing::get;
-use axum::routing::patch;
-use axum::Extension;
-use axum::Json;
-use axum::Router;
-use serde::Deserialize;
-use serde::Serialize;
+use axum::routing::{get, patch};
+use axum::{Extension, Json, Router};
+use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 use validator::Validate;
 
@@ -17,6 +12,7 @@ pub fn router() -> Router {
         .route("/v1/requests", get(list_requests).post(create_request))
         .route("/v1/requests/:requestId/binding", patch(binding_request))
         .route("/v1/requests/:requestId/accept", patch(accept_helper))
+        .route("/v1/requests/:requestId/done", patch(mark_done))
 }
 
 #[derive(Deserialize, Validate)]
@@ -175,6 +171,25 @@ async fn accept_helper(
         "#,
         req.helper_id,
         "in_progres",
+        request_id,
+    )
+    .execute(&*db)
+    .await
+    .map_err(|e| match e {
+        _ => Error::Sqlx(e.into()),
+    })?;
+
+    Ok(StatusCode::NO_CONTENT)
+}
+
+async fn mark_done(db: Extension<PgPool>, Path(request_id): Path<i32>) -> Result<StatusCode> {
+    sqlx::query!(
+        r#"
+            update requests
+            set status = $1
+            where id = $2
+        "#,
+        "done",
         request_id,
     )
     .execute(&*db)

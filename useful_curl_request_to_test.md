@@ -12,3 +12,11 @@ curl -X GET http://localhost:8080/v1/requests
 ```
 curl -d '{"helper_id": 2}' -H "Content-Type: application/json" -X PATCH http://localhost:8080/v1/requests/2/binding
 ```
+- listing helpers
+```
+curl http://localhost:8080/v1/helpers
+```
+- mark request as done
+```
+curl -H "Content-Type: application/json" -X POST http://localhost:8080/v1/requests/1/done -v
+```
