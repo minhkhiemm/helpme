@@ -3,6 +3,7 @@ use axum::{Extension, Router};
 use sqlx::PgPool;
 
 mod error;
+mod helper;
 mod request;
 
 pub use error::Error;
@@ -10,7 +11,10 @@ pub use error::Error;
 pub type Result<T, E = Error> = ::std::result::Result<T, E>;
 
 pub fn app(db: PgPool) -> Router {
-    Router::new().merge(request::router()).layer(Extension(db))
+    Router::new()
+        .merge(request::router())
+        .merge(helper::router())
+        .layer(Extension(db))
 }
 
 pub async fn serve(db: PgPool) -> anyhow::Result<()> {
