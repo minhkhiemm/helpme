@@ -17,6 +17,7 @@ pub fn router() -> Router {
     Router::new()
         .route("/v1/requests", get(list_requests).post(create_request))
         .route("/v1/requests/:requestId/binding", patch(binding_request))
+        .route("/v1/requests/:requestId/accept", patch(accept_helper))
 }
 
 #[derive(Deserialize, Validate)]
@@ -144,6 +145,38 @@ async fn binding_request(
         "#,
         request_id,
         req.helper_id,
+    )
+    .execute(&*db)
+    .await
+    .map_err(|e| match e {
+        _ => Error::Sqlx(e.into()),
+    })?;
+
+    Ok(StatusCode::NO_CONTENT)
+}
+
+#[derive(Deserialize, Validate)]
+struct AcceptHelperRequest {
+    #[validate(range(min = 1))]
+    helper_id: i32,
+}
+
+async fn accept_helper(
+    db: Extension<PgPool>,
+    Path(request_id): Path<i32>,
+    Json(req): Json<AcceptHelperRequest>,
+) -> Result<StatusCode> {
+    req.validate()?;
+
+    sqlx::query!(
+        r#"
+            update requests
+            set helper_id = $1, status = $2
+            where id = $3
+        "#,
+        req.helper_id,
+        "in_progres",
+        request_id,
     )
     .execute(&*db)
     .await
